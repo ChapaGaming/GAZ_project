@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>Каталог</title>
+    <link rel="stylesheet" href="http://127.0.0.1:8000/static/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" type="image/x-icon" href="http://127.0.0.1:8000/static/logo.ico">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a href="http://127.0.0.1:8000/cataloge?email={{email}}&searching={{searching}}"><img class="logo" src="http://127.0.0.1:8000/static/logo.ico"></a>
+            <b><i><h1>МАГАЗИН</h1></i></b>
+        </div>
+        <div class="header-right">
+            <form name="found" method="get" action="/cataloge?email={{email}}">
+                <input type="hidden" name="email" value="{{email}}">
+                <input type="text" name="searching" class="found" placeholder="поиск..." value="{{searching}}">
+                <button type="submit" style="display: none;"></button> </form>
+            <a href="http://127.0.0.1:8000/basket/?email={{email}}"><img class="buy" src="http://127.0.0.1:8000/static/shop.ico"></a>
+        </div>
+    </header>
+    <div class="production">
+        {% if seller %}
+        Здравтвуйте, продавец мы можете зайти в <a href = "http://127.0.0.1:8000/basket/?email={{email}}">Заказы</a>
+        {% endif %}
+        {% for product in production %}
+            <form action="/cataloge?email={{email}}" name="place" class="product" method="post">
+                <div class="product-info">
+                    <h3>{{product.model}}</h3>
+                    <h5>Цена: {{product.cost}} ₽</h5>
+                </div>
+                <div class="product-description">
+                    <p>{{product.description}}</p> </div>
+                <div class="product-actions">
+                    <button class="buy" type="submit" name="buy_form" value="{{product.id}}">Купить</button>
+                    <h5>
+                        {% if product.in_stage %}
+                            На складе
+                        {% else %}
+                            Диллерский центр
+                        {% endif %}
+                    </h5>
+                </div>
+            </form>
+        {% endfor %}
+    </div>
+</body>
+</html>

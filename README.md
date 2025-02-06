@@ -1,7 +1,2 @@
-# magazine
-my project for school :P
-#
-#
-#
-Цель:
-  Создать сайт, изучить фреймворк FastAPI, найчиться верстать сайты и писать для них стиль
+# founder
+my project for GAZ

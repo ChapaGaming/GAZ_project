@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Каталог</title>
+    <title>Подтверждение</title>
     <link rel="stylesheet" href="static/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="shortcut icon" type="image/x-icon" href="static/logo.ico">
@@ -10,7 +10,7 @@
     <header>
         <div class="header-left">
             <a href="http://127.0.0.1:8000/cataloge?email={{email}}&searching={{searching}}"><img class="logo" src="static/logo.ico"></a>
-            <b><i><h1>КАТАЛОГ</h1></i></b>
+            <b><i><h1>ПОДТВЕРЖДЕНИЕ</h1></i></b>
         </div>
         <div class="header-right">
             <form name="found" method="get" action="/cataloge?email={{email}}">
@@ -21,20 +21,36 @@
         </div>
     </header>
     <div class="production">
-        {% if seller %}
-        <p><center style="color: rgb(221, 60, 92);">Здравтвуйте, продавец мы можете зайти в <a  style="color: rgb(255, 6, 6); font-size: large;" href = "http://127.0.0.1:8000/accepter?email={{email}}">Заказы</a></center></p>
-        {% endif %}
         {% for product in production %}
-            <form action="/cataloge?email={{email}}" name="place" class="product" method="post">
+            <form action="/accepter?email={{email}}&searching=" name="place" class="product" method="post">
                 <div class="product-info">
                     <h3>{{product.model}}</h3>
                     Цвет: {{product.color}}
                     <h5>Цена: {{product.cost}} ₽</h5>
                 </div>
                 <div class="product-description">
+                    
+                    <ol>
+                        Желающие купить:
+                        {% for user in product.willings %}
+                        <li>{{user.FIO}}</li>
+                        {% endfor %}
+                    </ol>
+                </div>
+                <div>
+                    <input name = "kind" type = "radio" value="На складе">На складе<br>
+                    <input name = "kind" type = "radio" value="На рассмотрении">На рассмотрении<br>
+                    <input name = "kind" type = "radio" value="В доставке">В доставке<br>
+                    <input name = "kind" type = "radio" value="В диллерском центре">В диллерском центре
                 </div>
                 <div class="product-actions">
-                    <button class="buy" type="submit" name="buy_form" value="{{product.id}}">Заказать</button>
+                    <select name = "FIO_user" style = "width: 200px; height: 30px;">
+                        {% for user in product.willings %}
+                        <option value="{{user.FIO}}">{{user.FIO}}</option>
+                        {% endfor %}
+                    </select>
+                    <br>
+                    <button class="buy" type="submit" name="acc_form" value="{{product.id}}">Одобрить</button>
                     <h5>
                         {{product.kind}}
                     </h5>

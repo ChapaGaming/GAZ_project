@@ -33,7 +33,8 @@ class Cataloge(SQLModel, table=True):
     color: str
     in_stage: bool
     cost: float
-
+    buyer: str|None
+    kind: str
     willings: list[User] = Relationship(back_populates="baskets", link_model=UserCatalogeLink)
 
 # Указываем директорию для шаблонов
@@ -191,18 +192,66 @@ def read_root(session: SessionDep,request: Request, email:str|None, buy_form: in
     product = session.get(Cataloge,id)
     scalar = select(User).where(User.email == email)
     result = session.exec(scalar)
-    print("Пользаватель добавил объект в корзину",product)
-    if product.amount < 1:
-        return HTMLResponse(content='<h1 style = "color: red;">нет в наличии</h1>')
+    print("Пользаватель добавил объект в ожидание",product)
+    if product.in_stage == False:
+        return HTMLResponse(content='<h1 style = "color: red;">Уже в диллерском центре</h1>')
     user = result.first()
     if user in product.willings:
-        return HTMLResponse(content='<h1 style = "color: red;">вы уже купили</h1>')
+        return HTMLResponse(content='<h1 style = "color: red;">вы уже заказали</h1>')
     product.willings.append(user)
     session.add(product)
     session.commit()
     if not searching:
         searching=""
     return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge?email={email}&searching={searching}'" />""")
+
+@app.get("/accepter", response_class=HTMLResponse)
+async def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
+    req = {
+        "request": request,
+        "email": email,
+        "searching":"",
+        "production": [] # Устанавливаем production по умолчанию пустым списком
+    }
+    if go_login(session,email):
+        req["seller"] = False
+    else:
+        statement = select(User).where(User.email == email)
+        user = session.exec(statement).one()
+        req["seller"] = user.seller
+
+    
+    
+    if searching and searching.strip():
+        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%")|Cataloge.in_stage == True)
+        production = session.exec(statement).all()
+        req["production"] = production
+        req["searching"] = searching
+    else:
+        statement = select(Cataloge).where(Cataloge.in_stage == True)
+        production = session.exec(statement).all()
+        req["production"] = production
+    return templates.TemplateResponse("accepter.html", req)
+
+@app.post("/accepter", response_class=HTMLResponse)
+def read_root(session: SessionDep,FIO_user: Annotated[str, Form()],request: Request, email:str|None, acc_form: Annotated[int, Form()], kind: Annotated[str, Form()],  searching: str | None = None):
+    if go_login(session,email):
+        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
+    print(kind)
+    id = acc_form
+    product = session.get(Cataloge,id)
+    scalar = select(User).where(User.FIO == FIO_user)
+    user = session.exec(scalar)
+    user = user.first()
+    print("Продавец одобрил товар:",product,user)
+    product.buyer = user.FIO
+    product.kind = kind
+    session.add(product)
+    session.commit()
+    if not searching:
+        searching=""
+    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/accepter?email={email}&searching={searching}'" />""")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

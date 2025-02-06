@@ -1,3 +1,11 @@
+.found::-webkit-input-placeholder {
+  color: white; }
+.found::-webkit-input-placeholder {
+  color: white; }
+.found:-moz-placeholder {
+  color: white; }
+.found:-ms-input-placeholder {
+  color: white; }
 /* Общие стили (отключаем полосы прокрутки) */
 body {
   scrollbar-width: none;
@@ -19,7 +27,7 @@ header {
   position: fixed;
   margin-top: -50px;
   margin-left: -8px;
-  background-color: rgba(255, 114, 118, 1);
+  background-color: rgb(0,170,173);
   width: 100%;
   display: flex;
   text-align: justify;
@@ -35,7 +43,6 @@ header .header-left {
   gap: 50px;
   align-items: center;
 }
-
 header .header-right {
   display: flex;
   justify-content: space-between;
@@ -47,6 +54,7 @@ header .header-right {
 .buy {
   width: 100px;
   height: 100px;
+
 }
 
 .logo {
@@ -60,7 +68,7 @@ header .header-right {
   width: 700px;
   border-radius: 5px;
   padding-left: 10px;
-  background-color: rgb(255, 206, 206);
+  background-color: rgb(43, 213, 216);
   border: 0px;
 }
 
@@ -168,7 +176,7 @@ header .header-right {
 }
 
 @media (min-width: 991px) {basker_N[readonly] {
-  background-color: blue;
+  background-color: rgb(0,170,173);
 }
 .text_submit{
   display: none;
@@ -182,7 +190,7 @@ header .header-right {
       position: fixed;
       margin-top: -50px;
       margin-left: -8px;
-      background-color: rgba(255, 114, 118, 1);
+      background-color: rgb(0,170,173);
       width: 100%;
       display: flex;
       text-align: justify;
@@ -251,7 +259,7 @@ header .header-right {
       position: fixed;
       margin-top: -50px;
       margin-left: -8px;
-      background-color: rgba(255, 114, 118, 1);
+      background-color: rgb(0,170,173);
       width: 100%;
       display: flex;
       text-align: justify;

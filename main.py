@@ -113,8 +113,6 @@ def read_root(session: SessionDep, request: Request, FIO: str = Form(...), email
             hash_e = hashing(email)
             hash_pas = hashing(password)
             user = User(FIO = FIO, email = hash_e, password = hash_pas, basket = None, seller=False)
-        except ValidationError as e:
-            return e
         except Exception as e:
             return e
         email_query = select(User).where(User.email == hash_e)
@@ -206,7 +204,7 @@ def read_root(session: SessionDep,request: Request, email:str|None, buy_form: in
     return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge?email={email}&searching={searching}'" />""")
 
 @app.get("/accepter", response_class=HTMLResponse)
-async def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
+def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
     req = {
         "request": request,
         "email": email,
@@ -234,7 +232,7 @@ async def read_root(request: Request, session: SessionDep, email: str | None = N
     return templates.TemplateResponse("accepter.html", req)
 
 @app.post("/accepter", response_class=HTMLResponse)
-def read_root(session: SessionDep,FIO_user: Annotated[str, Form()],request: Request, email:str|None, acc_form: Annotated[int, Form()], kind: Annotated[str, Form()],  searching: str | None = None):
+def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|None, acc_form: Annotated[int, Form()], kind: Annotated[str, Form()],  searching: str | None = None):
     if go_login(session,email):
         return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
     print(kind)
@@ -251,6 +249,23 @@ def read_root(session: SessionDep,FIO_user: Annotated[str, Form()],request: Requ
     if not searching:
         searching=""
     return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/accepter?email={email}&searching={searching}'" />""")
+
+@app.get("/add", response_class=HTMLResponse)
+def read_root(session: SessionDep, request: Request, email:str|None):
+    if go_login(session,email):
+        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
+    return templates.TemplateResponse("add.html", {"request": request, "email": email})
+
+@app.post("/add", response_class=HTMLResponse)
+def read_root(session: SessionDep, request: Request, email:str|None, model: Annotated[str, Form()], kind: Annotated[str, Form()], in_stage: Annotated[str, Form()], cost: Annotated[int, Form()], color: Annotated[str, Form()]):
+    if in_stage == "1":
+        in_stage = True
+    else:
+        in_stage = False
+    item = Cataloge(model = model, kind = kind, in_stage=in_stage, color=color, cost=cost, willings=[])
+    session.add(item)
+    session.commit()
+    return "200 OK"
 
 if __name__ == "__main__":
     import uvicorn

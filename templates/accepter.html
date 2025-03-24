@@ -20,6 +20,7 @@
             <a href="http://127.0.0.1:8000/basket/?email={{email}}"><img id = "basket" class="buy" src="static/basket.ico"></a>
         </div>
     </header>
+    
     <div class="production">
         {% for product in production %}
             <form action="/accepter?email={{email}}&searching=" name="place" class="product" method="post">
@@ -38,10 +39,11 @@
                     </ol>
                 </div>
                 <div>
-                    <input name = "kind" type = "radio" value="На складе">На складе<br>
-                    <input name = "kind" type = "radio" value="На рассмотрении">На рассмотрении<br>
-                    <input name = "kind" type = "radio" value="В доставке">В доставке<br>
-                    <input name = "kind" type = "radio" value="В диллерском центре">В диллерском центре
+                    Текущее состояние {{product.kind}}<br>
+                    <input name = "kind" type = "radio" value="На складе" {% if product.kind == "На складе" %} checked {% endif %}>На складе<br>
+                    <input name = "kind" type = "radio" value="На рассмотрении" {% if product.kind == "На рассмотрении" %} checked {% endif %}>На рассмотрении<br>
+                    <input name = "kind" type = "radio" value="В доставке" {% if product.kind == "В доставке" %} checked {% endif %}>В доставке<br>
+                    <input name = "kind" type = "radio" value="В диллерском центре" {% if product.kind == "В диллерском центре" %} checked {% endif %}>В диллерском центре
                 </div>
                 <div class="product-actions">
                     <select name = "FIO_user" style = "width: 200px; height: 30px;">
@@ -57,6 +59,13 @@
                 </div>
             </form>
         {% endfor %}
+        
+        <center><button class = "add_el" onclick="add()">+</button></center>
     </div>
 </body>
+<script>
+    function add(){
+        window.location.href = "add?email={{email}}"
+    }
+</script>
 </html>

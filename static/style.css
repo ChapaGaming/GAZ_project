@@ -174,7 +174,24 @@ header .header-right {
   border: 0px;
   margin-top: 20px;
 }
-
+.add_el{
+  color: #FFFF;
+  width: 100px;
+  height: 100px;
+  border-radius: 50px;
+  background-color: rgb(36, 236, 96);
+  font-size: 50px;
+  border: 0px
+}
+.add_el:hover{
+  color: #c5c5c5;
+  width: 100px;
+  height: 100px;
+  border-radius: 50px;
+  background-color: rgb(27, 179, 73);
+  font-size: 50px;
+  border: 0px
+}
 @media (min-width: 991px) {basker_N[readonly] {
   background-color: rgb(0,170,173);
 }

@@ -23,19 +23,22 @@
     <br>
     <br>
     <p></p><br>
-    <center><form style = "font-size: 25px;" method="POST" action = "http://127.0.0.1:8000/add?email={{email}}">
+    <center><form style = "font-size: 25px;" method="POST" action = "http://127.0.0.1:8000/add?email={{email}}" class="creator">
+        <div>
         <label>Модель:  </label><input name = "model" minlength="1"><br>
         <label>Цвет:  </label><input name = "color" minlength="1"><br>
-        <label>На складе? </label><input name = "in_stage" value = "1" type = "radio" minlength="1" checked />Да<br> <input name = "in_stage" value = "0" type = "radio" minlength="1">Нет<br>
-        <label>Цена: </label><input type = "number" name = "cost" minlength="1"><br>
-        <label>Состояние:</label><br>
+        <label>На складе? </label><input name = "in_stage" value = "1" type = "radio" minlength="1" checked />Да <input name = "in_stage" value = "0" type = "radio" minlength="1">Нет<br>
+        <label>Цена: </label><input type = "number" name = "cost" minlength="1">
+        </div>
         <div>
+        <label>Состояние:</label><br>
+        
             <input name = "kind" type = "radio" value="На складе" checked />На складе<br>
             <input name = "kind" type = "radio" value="На рассмотрении">На рассмотрении<br>
             <input name = "kind" type = "radio" value="В доставке">В доставке<br>
             <input name = "kind" type = "radio" value="В диллерском центре">В диллерском центре
         </div>
-        <button style = "width: 120px;"type = "submit">Создать</button>
+        <button style = "width: 120px;" type = "submit"><b>Создать</b></button>
     </form></center>
 </body>
 </html>

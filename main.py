@@ -6,7 +6,9 @@ from sqlalchemy.pool import QueuePool
 from typing import Annotated
 from sqlalchemy import func
 import hashlib
-
+from colorama import init
+init()
+from colorama import Fore, Style
 #--------------------------#
 # venv\Scripts\activate    #
 #                          #  
@@ -203,7 +205,7 @@ def read_root(session: SessionDep,request: Request, email:str|None, buy_form: in
         searching=""
     return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge?email={email}&searching={searching}'" />""")
 
-@app.get("/accepter", response_class=HTMLResponse)
+@app.get("/editor", response_class=HTMLResponse)
 def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
     req = {
         "request": request,
@@ -229,26 +231,35 @@ def read_root(request: Request, session: SessionDep, email: str | None = None, s
         statement = select(Cataloge).where(Cataloge.in_stage == True)
         production = session.exec(statement).all()
         req["production"] = production
-    return templates.TemplateResponse("accepter.html", req)
+    return templates.TemplateResponse("editor.html", req)
 
-@app.post("/accepter", response_class=HTMLResponse)
-def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|None, acc_form: Annotated[int, Form()], kind: Annotated[str, Form()],  searching: str | None = None):
+@app.post("/editor", response_class=HTMLResponse)
+def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|None, acc_form: Annotated[str, Form()], kind: Annotated[str, Form()],  searching: str | None = None):
+
     if go_login(session,email):
         return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    print(kind)
-    id = acc_form
+    mode = acc_form[-3:] # del удаление up_ изменение
+    id = acc_form[:-3]
     product = session.get(Cataloge,id)
     scalar = select(User).where(User.FIO == FIO_user)
     user = session.exec(scalar)
     user = user.first()
-    print("Продавец одобрил товар:",product,user)
-    product.buyer = user.FIO
-    product.kind = kind
-    session.add(product)
-    session.commit()
-    if not searching:
-        searching=""
-    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/accepter?email={email}&searching={searching}'" />""")
+    if mode == "up_":
+        
+        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {user.FIO}(id={user.id}) обновил товар:",product)
+        product.buyer = user.FIO
+        product.kind = kind
+        session.add(product)
+        session.commit()
+        if not searching:
+            searching=""
+        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/editor?email={email}&searching={searching}'" />""")
+    elif mode == "del":
+        session.delete(product)
+        session.commit()
+        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL + f":  Продавец {user.FIO}(id={user.id}) удалил товар:", product)
+        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/editor?email={email}&searching={searching}'" />""")
+
 
 @app.get("/add", response_class=HTMLResponse)
 def read_root(session: SessionDep, request: Request, email:str|None):

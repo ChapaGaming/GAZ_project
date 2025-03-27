@@ -22,7 +22,7 @@
     </header>
     <div class="production">
         {% if seller %}
-        <p><center style="color: rgb(221, 60, 92);">Здравтвуйте, продавец мы можете зайти в <a  style="color: rgb(255, 6, 6); font-size: large;" href = "http://127.0.0.1:8000/accepter?email={{email}}">Заказы</a></center></p>
+        <p><center style="color: rgb(221, 60, 92);">Здравтвуйте, продавец мы можете зайти в <a  style="color: rgb(255, 6, 6); font-size: large;" href = "http://127.0.0.1:8000/editor?email={{email}}">Заказы</a></center></p>
         {% endif %}
         {% for product in production %}
             <form action="/cataloge?email={{email}}" name="place" class="product" method="post">

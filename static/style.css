@@ -21,7 +21,9 @@ body {
 i {
   color: rgb(255, 255, 255);
 }
-
+.product-actions{
+  gap: 10px
+}
 /* Стили для header (общие для всех устройств) */
 header {
   position: fixed;
@@ -166,7 +168,30 @@ header .header-right {
   justify-content: center;
   gap: 10px;
 }
-
+.creator{
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  align-content: center;
+  padding: 10px;
+  border: 1px solid #ddd;
+  margin-bottom: 10px;
+}
+.creator button{
+  background-color: rgb(36, 236, 96);
+  border-radius: 200px;
+  height: 50px;
+  border-width: 0px;
+  font-size: large;
+  color:white
+}
+.creator button:hover{
+  background-color: rgb(29, 185, 76);
+  color:rgb(216, 216, 216);
+  height: 55px;
+  width: 101%;
+}
 .basker_N {
   font-size: larger;
   font-style: normal;

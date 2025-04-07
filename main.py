@@ -6,9 +6,11 @@ from sqlalchemy.pool import QueuePool
 from typing import Annotated
 from sqlalchemy import func
 import hashlib
+import datetime
 from colorama import init
 init()
 from colorama import Fore, Style
+
 #--------------------------#
 # venv\Scripts\activate    #
 #                          #  
@@ -39,8 +41,8 @@ class Cataloge(SQLModel, table=True):
     kind: str
     willings: list[User] = Relationship(back_populates="baskets", link_model=UserCatalogeLink)
 
-# Указываем директорию для шаблонов
 
+# Указываем директорию для шаблонов
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", staticfiles.StaticFiles(directory="static"), name="static")
 
@@ -56,6 +58,18 @@ connect_args = {"check_same_thread": False,}
 engine = create_engine(sqlite_url, poolclass=QueuePool, pool_size=10, max_overflow=20, pool_recycle=3600, connect_args=connect_args)
 SessionDep = Annotated[Session, Depends(get_session)]
 # функции связанные с fastapi
+def history(message : str,type_message : str = "Изменение", warning : bool = False) -> None:
+    if warning:
+        with open("db/history_main.txt", "a", encoding="utf-8") as history:
+            date = datetime.datetime.now()
+            history.write("\n"+type_message+" за "+str(date)+"\n")
+            history.write(message+"\n")
+    
+    with open("db/history.txt", "a", encoding="utf-8") as history:
+        date = datetime.datetime.now()
+        history.write("\n"+type_message+" за "+str(date)+"\n")
+        history.write(message+"\n")
+
 def go_login(session,email):
     
     try:
@@ -84,9 +98,15 @@ def create_db_and_tables():# обнуление/создание таблиц
 def lifespan():
     create_db_and_tables()
 # обработка запросов
+@app.on_event("shutdown")
+def on_end():
+    with open("db/history.txt", "a", encoding="utf-8") as history:
+        date = datetime.datetime.now()
+        history.write("\n▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ \n Остановка сервера")
 @app.on_event("startup")
 def on_start():
     create_db_and_tables()
+    history("▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ","Запуск сервера")
 @app.get("/",response_class=HTMLResponse)
 def read_root(request: Request):
     req = {"request": request}
@@ -100,7 +120,7 @@ def read_root(session:SessionDep, request: Request, password: str|None = Form(..
     result = session.exec(statement)
     first = result.first()
     if not (first is None):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.1; URL='/cataloge?email={hash_e}'" />""")
+        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.1; URL='/cataloge/cars?email={hash_e}'" />""")
     return HTMLResponse(content=f'<h1 style = "color: red;">Пользователь не найден</h1>')
 
 @app.get("/register",response_class=HTMLResponse)
@@ -125,6 +145,7 @@ def read_root(session: SessionDep, request: Request, FIO: str = Form(...), email
         session.add(user)
         session.commit()
         session.refresh(user)
+        history("Пользователь {user} зарегистрировался","Регистрация")
         return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="2; URL='/'" />""")
     return f'<h1 style = "color: red;">Пароли не совпадают</h1>'
 
@@ -156,7 +177,22 @@ def read_root(session: SessionDep, request: Request, email:str|None, searching: 
     req["len"] = len(production)
     return templates.TemplateResponse("basket.html", req)
 
-@app.get("/cataloge", response_class=HTMLResponse)
+
+@app.post("/basket", response_class=HTMLResponse)
+def read_root(session: SessionDep, email:str|None, submit: int = Form(...), searching: str | None = None):
+    if go_login(session,email):
+        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
+    product = session.get(Cataloge,submit)
+    statement = select(User).where(User.email == email)
+    user = session.exec(statement).one()
+    user.baskets.remove(product)
+    session.add(user)
+    session.commit()
+    history(f"Пользователь {user.FIO} удалил отслеживание для {product}", "Удаление отслеживания")
+    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
+
+
+@app.get("/cataloge/cars", response_class=HTMLResponse)
 async def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
     req = {
         "request": request,
@@ -182,9 +218,9 @@ async def read_root(request: Request, session: SessionDep, email: str | None = N
         statement = select(Cataloge)
         production = session.exec(statement).all()
         req["production"] = production
-    return templates.TemplateResponse("cataloge.html", req)
+    return templates.TemplateResponse("cars.html", req)
 
-@app.post("/cataloge", response_class=HTMLResponse)
+@app.post("/cataloge/cars", response_class=HTMLResponse)
 def read_root(session: SessionDep,request: Request, email:str|None, buy_form: int = Form(...), searching: str | None = None):
     if go_login(session,email):
         return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
@@ -192,26 +228,25 @@ def read_root(session: SessionDep,request: Request, email:str|None, buy_form: in
     product = session.get(Cataloge,id)
     scalar = select(User).where(User.email == email)
     result = session.exec(scalar)
-    print("Пользаватель добавил объект в ожидание",product)
     if product.in_stage == False:
         return HTMLResponse(content='<h1 style = "color: red;">Уже в диллерском центре</h1>')
     user = result.first()
     if user in product.willings:
-        return HTMLResponse(content='<h1 style = "color: red;">вы уже заказали</h1>')
+        return HTMLResponse(content='<h1 style = "color: red;">вы уже заказали, вы можете удалить его в списке отслеживания</h1>')
     product.willings.append(user)
     session.add(product)
     session.commit()
     if not searching:
         searching=""
-    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge?email={email}&searching={searching}'" />""")
+    history(F"пользователь {user.FIO} начал отслеживать {product}", "Отслеживание")
+    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
 
-@app.get("/editor", response_class=HTMLResponse)
+@app.get("/cataloge/cars", response_class=HTMLResponse)
 def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
     req = {
         "request": request,
         "email": email,
-        "searching":"",
-        "production": [] # Устанавливаем production по умолчанию пустым списком
+        "searching":""
     }
     if go_login(session,email):
         req["seller"] = False
@@ -219,7 +254,69 @@ def read_root(request: Request, session: SessionDep, email: str | None = None, s
         statement = select(User).where(User.email == email)
         user = session.exec(statement).one()
         req["seller"] = user.seller
+    
+    if searching and searching.strip():
+        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
+        production = session.exec(statement).all()
+        req["production"] = production
+        req["searching"] = searching
+    else:
+        statement = select(Cataloge)
+        production = session.exec(statement).all()
+        req["production"] = production
+    return templates.TemplateResponse("cars.html", req)
 
+@app.get("/cataloge/variants", response_class=HTMLResponse)
+def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
+    req = {
+        "request": request,
+        "email": email,
+        "searching":"",
+        "len_production": 0
+    }
+    if go_login(session,email):
+        req["seller"] = False
+    else:
+        statement = select(User).where(User.email == email)
+        user = session.exec(statement).one()
+        req["seller"] = user.seller
+    
+    if searching and searching.strip():
+        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
+        production = session.exec(statement).all()
+        req["searching"] = searching
+
+        models = set(map(lambda x: x.model,production))
+        all_model = list(map(lambda x: x.model,production))
+
+        production = list(map(lambda x: (x,all_model.count(x)), models))
+        req["production"] = production
+    else:
+        statement = select(Cataloge)
+        production = session.exec(statement).all()
+
+        models = set(map(lambda x: x.model,production))
+        all_model = list(map(lambda x: x.model,production))
+    
+        production = list(map(lambda name: (name,all_model.count(name)), models))
+        req["production"] = production
+    req["len_production"] = len(production)
+    return templates.TemplateResponse("variants.html", req)
+
+
+@app.get("/editor", response_class=HTMLResponse)
+def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
+    req = {
+        "request": request,
+        "email": email,
+        "searching":""
+    }
+    if go_login(session,email):
+        req["seller"] = False
+    else:
+        statement = select(User).where(User.email == email)
+        user = session.exec(statement).one()
+        req["seller"] = user.seller
     
     
     if searching and searching.strip():
@@ -244,20 +341,30 @@ def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|No
     scalar = select(User).where(User.FIO == FIO_user)
     user = session.exec(scalar)
     user = user.first()
+
+    seller = select(User).where(User.email == email)
+    seller = session.exec(seller)
+    seller = seller.first()
     if mode == "up_":
-        
-        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {user.FIO}(id={user.id}) обновил товар:",product)
-        product.buyer = user.FIO
+        try:
+            user_name = user.FIO
+        except:
+            user_name = "<пусто>"
+        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {seller.FIO}(id={seller.id}) обновил пользователю {user_name} товар:",product)
+        old_product = product
+        product.buyer = user_name
         product.kind = kind
         session.add(product)
         session.commit()
         if not searching:
             searching=""
+        history(F"Продавец {seller.FIO} изменил {old_product} на {product}", "Обновление товара", warning=True)
         return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/editor?email={email}&searching={searching}'" />""")
     elif mode == "del":
         session.delete(product)
         session.commit()
-        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL + f":  Продавец {user.FIO}(id={user.id}) удалил товар:", product)
+        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL + f":  Продавец {seller.FIO}(id={seller.id}) удалил товар:", product)
+        history(F"Продавец {seller.FIO} удалил {product}", "Удаление", warning=True)
         return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/editor?email={email}&searching={searching}'" />""")
 
 
@@ -269,11 +376,17 @@ def read_root(session: SessionDep, request: Request, email:str|None):
 
 @app.post("/add", response_class=HTMLResponse)
 def read_root(session: SessionDep, request: Request, email:str|None, model: Annotated[str, Form()], kind: Annotated[str, Form()], in_stage: Annotated[str, Form()], cost: Annotated[int, Form()], color: Annotated[str, Form()]):
+    if go_login(session,email):
+        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
+    seller = select(User).where(User.email == email)
+    seller = session.exec(seller)
+    seller = seller.first()
     if in_stage == "1":
         in_stage = True
     else:
         in_stage = False
     item = Cataloge(model = model, kind = kind, in_stage=in_stage, color=color, cost=cost, willings=[])
+    history(F"пользователь {seller.FIO} создал {item}", "Создание", warning=True)
     session.add(item)
     session.commit()
     return "200 OK"

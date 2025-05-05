@@ -218,7 +218,7 @@ async def read_root(request: Request, session: SessionDep, email: str | None = N
         statement = select(Cataloge)
         production = session.exec(statement).all()
         req["production"] = production
-    return templates.TemplateResponse("cars.html", req)
+    return templates.TemplateResponse("cataloge.html", req)
 
 @app.post("/cataloge/cars", response_class=HTMLResponse)
 def read_root(session: SessionDep,request: Request, email:str|None, buy_form: int = Form(...), searching: str | None = None):
@@ -264,7 +264,7 @@ def read_root(request: Request, session: SessionDep, email: str | None = None, s
         statement = select(Cataloge)
         production = session.exec(statement).all()
         req["production"] = production
-    return templates.TemplateResponse("cars.html", req)
+    return templates.TemplateResponse("cataloge.html", req)
 
 @app.get("/cataloge/variants", response_class=HTMLResponse)
 def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
@@ -338,21 +338,15 @@ def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|No
     mode = acc_form[-3:] # del удаление up_ изменение
     id = acc_form[:-3]
     product = session.get(Cataloge,id)
-    scalar = select(User).where(User.FIO == FIO_user)
-    user = session.exec(scalar)
-    user = user.first()
 
     seller = select(User).where(User.email == email)
     seller = session.exec(seller)
     seller = seller.first()
     if mode == "up_":
-        try:
-            user_name = user.FIO
-        except:
-            user_name = "<пусто>"
-        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {seller.FIO}(id={seller.id}) обновил пользователю {user_name} товар:",product)
+        
+        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {seller.FIO}(id={seller.id}) обновил пользователю {FIO_user} товар:",product)
         old_product = product
-        product.buyer = user_name
+        product.buyer = FIO_user
         product.kind = kind
         session.add(product)
         session.commit()

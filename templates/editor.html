@@ -29,15 +29,6 @@
                     Цвет: {{product.color}}
                     <h5>Цена: {{product.cost}} ₽</h5>
                 </div>
-                <div class="product-description">
-                    
-                    <ol>
-                        Желающие купить:
-                        {% for user in product.willings %}
-                        <li>{{user.FIO}}</li>
-                        {% endfor %}
-                    </ol>
-                </div>
                 <div>
                     Текущее состояние<br>
                     <input name = "kind" type = "radio" value="На складе" {% if product.kind == "На складе" %} checked {% endif %}>На складе<br>
@@ -46,12 +37,7 @@
                     <input name = "kind" type = "radio" value="В диллерском центре" {% if product.kind == "В диллерском центре" %} checked {% endif %}>В диллерском центре
                 </div>
                 <div class="product-inputs" >
-                    Покупатель: <select name = "FIO_user" style = "width: 200px; height: 30px;">
-                        <option value="Не определён">Не определён</option>
-                        {% for user in product.willings %}
-                        <option value="{{user.FIO}}">{{user.FIO}}</option>
-                        {% endfor %}
-                    </select>
+                    Покупатель: <input name = "FIO_user" value = "{{product.buyer}}">
                     <br>
                     <button class="buy" type="submit" name="acc_form" value="{{product.id}}up_">Одобрить</button><br>
                     <button class="buy" style="background-color: red; font-size: small;" type="submit" name="acc_form" value="{{product.id}}del">Удалить товар</button>

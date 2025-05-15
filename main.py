@@ -107,92 +107,8 @@ def on_end():
 def on_start():
     create_db_and_tables()
     history("▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ","Запуск сервера")
-@app.get("/",response_class=HTMLResponse)
-def read_root(request: Request):
-    req = {"request": request}
-    return templates.TemplateResponse("login.html", req)
 
-@app.post("/")
-def read_root(session:SessionDep, request: Request, password: str|None = Form(...), email: str|None = Form(...)):
-    hash_e =hashing(email)
-    hash_pas = hashing(password)
-    statement = select(User).where(User.email == hash_e).where(User.password == hash_pas)
-    result = session.exec(statement)
-    first = result.first()
-    if not (first is None):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.1; URL='/cataloge/cars?email={hash_e}'" />""")
-    return HTMLResponse(content=f'<h1 style = "color: red;">Пользователь не найден</h1>')
-
-@app.get("/register",response_class=HTMLResponse)
-def read_root(request: Request):
-    req = {"request": request}
-    return templates.TemplateResponse("register.html", req)
-
-@app.post("/register",response_class=HTMLResponse)
-def read_root(session: SessionDep, request: Request, FIO: str = Form(...), email: str = Form(...), password: str = Form(...), rep_password: str = Form(...)):
-    if password == rep_password:
-        try:
-            hash_e = hashing(email)
-            hash_pas = hashing(password)
-            user = User(FIO = FIO, email = hash_e, password = hash_pas, basket = None, seller=False)
-        except Exception as e:
-            return e
-        email_query = select(User).where(User.email == hash_e)
-        result = session.exec(email_query)
-        first = result.first()
-        if not (first is None):
-            return HTMLResponse(content=f'<h1 style = "color: red;">Пользователь с такой почтой уже есть</h1>')
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        history("Пользователь {user} зарегистрировался","Регистрация")
-        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="2; URL='/'" />""")
-    return f'<h1 style = "color: red;">Пароли не совпадают</h1>'
-
-@app.get("/basket/", response_class=HTMLResponse)
-def read_root(session: SessionDep, request: Request, email:str|None, searching: str | None = None):
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    req = {
-        "request": request,
-        "searching":"",
-        "email": email,
-        "forms": [] # Устанавливаем production по умолчанию пустым списком
-    }
-    statement = select(User).where(User.email == email)
-    user = session.exec(statement).one()
-    if searching and searching.strip() and user:
-        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
-        alls = session.exec(statement).all()
-        production = []
-        for el in alls:
-            if el in user.baskets:
-                production.append(el)
-        req["forms"] = production
-        req["searching"] = searching
-    else:
-        statement = select(Cataloge)
-        production = session.exec(statement).all()
-        req["forms"] = user.baskets
-    req["len"] = len(production)
-    return templates.TemplateResponse("basket.html", req)
-
-
-@app.post("/basket", response_class=HTMLResponse)
-def read_root(session: SessionDep, email:str|None, submit: int = Form(...), searching: str | None = None):
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    product = session.get(Cataloge,submit)
-    statement = select(User).where(User.email == email)
-    user = session.exec(statement).one()
-    user.baskets.remove(product)
-    session.add(user)
-    session.commit()
-    history(f"Пользователь {user.FIO} удалил отслеживание для {product}", "Удаление отслеживания")
-    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
-
-
-@app.get("/cataloge/cars", response_class=HTMLResponse)
+@app.get("/cars", response_class=HTMLResponse)
 async def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
     req = {
         "request": request,
@@ -218,9 +134,9 @@ async def read_root(request: Request, session: SessionDep, email: str | None = N
         statement = select(Cataloge)
         production = session.exec(statement).all()
         req["production"] = production
-    return templates.TemplateResponse("cars.html", req)
+    return templates.TemplateResponse("cataloge.html", req)
 
-@app.post("/cataloge/cars", response_class=HTMLResponse)
+@app.post("/cars", response_class=HTMLResponse)
 def read_root(session: SessionDep,request: Request, email:str|None, buy_form: int = Form(...), searching: str | None = None):
     if go_login(session,email):
         return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
@@ -241,32 +157,8 @@ def read_root(session: SessionDep,request: Request, email:str|None, buy_form: in
     history(F"пользователь {user.FIO} начал отслеживать {product}", "Отслеживание")
     return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
 
-@app.get("/cataloge/cars", response_class=HTMLResponse)
-def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
-    req = {
-        "request": request,
-        "email": email,
-        "searching":""
-    }
-    if go_login(session,email):
-        req["seller"] = False
-    else:
-        statement = select(User).where(User.email == email)
-        user = session.exec(statement).one()
-        req["seller"] = user.seller
-    
-    if searching and searching.strip():
-        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
-        production = session.exec(statement).all()
-        req["production"] = production
-        req["searching"] = searching
-    else:
-        statement = select(Cataloge)
-        production = session.exec(statement).all()
-        req["production"] = production
-    return templates.TemplateResponse("cars.html", req)
 
-@app.get("/cataloge/variants", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
 def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
     req = {
         "request": request,
@@ -293,14 +185,22 @@ def read_root(request: Request, session: SessionDep, email: str | None = None, s
         req["production"] = production
     else:
         statement = select(Cataloge)
-        production = session.exec(statement).all()
+        production_last = session.exec(statement).all()
+        models = set(map(lambda x: x.model,production_last))
 
-        models = set(map(lambda x: x.model,production))
-        all_model = list(map(lambda x: x.model,production))
-    
-        production = list(map(lambda name: (name,all_model.count(name)), models))
-        req["production"] = production
-    req["len_production"] = len(production)
+        statement = select(
+            Cataloge.model,
+            func.avg(Cataloge.cost).label("average_cost"),
+            func.count(Cataloge.id).label("model_count")
+        ).group_by(Cataloge.model)
+
+        results = session.exec(statement).all()
+        req["production"] = results
+    try:
+        req["len_production"] = len(results)
+    except:
+        req["len_production"] = 0
+
     return templates.TemplateResponse("variants.html", req)
 
 
@@ -338,21 +238,15 @@ def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|No
     mode = acc_form[-3:] # del удаление up_ изменение
     id = acc_form[:-3]
     product = session.get(Cataloge,id)
-    scalar = select(User).where(User.FIO == FIO_user)
-    user = session.exec(scalar)
-    user = user.first()
 
     seller = select(User).where(User.email == email)
     seller = session.exec(seller)
     seller = seller.first()
     if mode == "up_":
-        try:
-            user_name = user.FIO
-        except:
-            user_name = "<пусто>"
-        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {seller.FIO}(id={seller.id}) обновил пользователю {user_name} товар:",product)
+        
+        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {seller.FIO}(id={seller.id}) обновил пользователю {FIO_user} товар:",product)
         old_product = product
-        product.buyer = user_name
+        product.buyer = FIO_user
         product.kind = kind
         session.add(product)
         session.commit()

@@ -7,19 +7,18 @@
     <link rel="shortcut icon" type="image/x-icon" href="static/logo.ico">
 </head>
 <body>
-    <header>
-        <div class="header-left">
-            <a href="http://127.0.0.1:8000/cataloge?email={{email}}&searching={{searching}}"><img class="logo" src="static/logo.ico"></a>
+    <div class="header-left">
+            <a href="http://127.0.0.1:8000/?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png"></a>
+            <a href="http://127.0.0.1:8000/cars?email={{email}}&searching={{searching}}"><img class="logo" src="../static/logo.ico"></a>
             <b><i><h1>РЕГИСТРАЦИЯ ТОВАРА</h1></i></b>
         </div>
         <div class="header-right">
-            <form name="found" method="get" action="/cataloge?email={{email}}">
+            <form name="found" method="get" action="/cars?email={{email}}">
                 <input type="hidden" name="email" value="{{email}}">
                 <input type="text" name="searching" class="found" placeholder="поиск..." value="{{searching}}">
                 <button type="submit" style="display: none;"></button> </form>
-            <a href="http://127.0.0.1:8000/basket/?email={{email}}"><img id = "basket" class="buy" src="static/basket.ico"></a>
+            <br>
         </div>
-    </header>
     <br>
     <br>
     <p></p><br>

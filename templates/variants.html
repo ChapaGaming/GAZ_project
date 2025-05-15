@@ -2,16 +2,16 @@
 <html lang="ru">
 <head>
     <title>Каталог</title>
-    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="../static/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" type="image/x-icon" href="static/logo.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="../static/logo.ico">
 </head>
 <body>
     <header>
         <div class="header-left">
             <a href="http://127.0.0.1:8000/?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png"></a>
             <a href="http://127.0.0.1:8000/cars?email={{email}}&searching={{searching}}"><img class="logo" src="../static/logo.ico"></a>
-            <b><i><h1>КАТАЛОГ</h1></i></b>
+            <b><i><h1>ВЫБОР МОДЕЛИ АВТОМОБИЛЯ</h1></i></b>
         </div>
         <div class="header-right">
             <form name="found" method="get" action="/cars?email={{email}}">
@@ -26,21 +26,21 @@
         <p><center style="color: rgb(221, 60, 92);">Здравтвуйте, продавец мы можете зайти в <a  style="color: rgb(255, 6, 6); font-size: large;" href = "http://127.0.0.1:8000/editor?email={{email}}">Заказы</a></center></p>
         {% endif %}
         {% for product in production %}
-            <form action="/variants?email={{email}}" name="place" class="product" method="post">
+            <div action="/cataloge/variants?email={{email}}" name="place" class="product" method="post">
                 <div class="product-info">
-                    <h3>{{product.model}}</h3>
-                    Цвет: {{product.color}}
-                    <h5>Цена: {{product.cost}} ₽</h5>
+                    <h3>{{product[0]}}</h3>
                 </div>
                 <div class="product-description">
                 </div>
                 <div class="product-actions">
-                    <!--button class="buy" type="submit" name="buy_form" value="{{product.id}}">Заказать</button-->
+                    
                     <h5>
-                        {{product.kind}}
+                        Различных автомобилей: {{product[2]}}<br>
+                        Средняя цена: {{product[1]}} ₽
                     </h5>
+                    <button style="background-color: rgb(31, 173, 50); border:0px; border-radius: 10px; color: white" onclick="location.href='/cars?email={{email}}&searching={{product[0]}}'">Посмотреть</button>
                 </div>
-            </form>
+            </div>
         {% endfor %}
     </div>
 </body>

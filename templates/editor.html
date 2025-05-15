@@ -9,15 +9,16 @@
 <body>
     <header>
         <div class="header-left">
-            <a href="http://127.0.0.1:8000/cataloge?email={{email}}&searching={{searching}}"><img class="logo" src="static/logo.ico"></a>
+            <a href="http://127.0.0.1:8000/?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png"></a>
+            <a href="http://127.0.0.1:8000/cars?email={{email}}&searching={{searching}}"><img class="logo" src="../static/logo.ico"></a>
             <b><i><h1>ПОДТВЕРЖДЕНИЕ</h1></i></b>
         </div>
         <div class="header-right">
-            <form name="found" method="get" action="/cataloge?email={{email}}">
+            <form name="found" method="get" action="/cars?email={{email}}">
                 <input type="hidden" name="email" value="{{email}}">
                 <input type="text" name="searching" class="found" placeholder="поиск..." value="{{searching}}">
                 <button type="submit" style="display: none;"></button> </form>
-            <a href="http://127.0.0.1:8000/basket/?email={{email}}"><img id = "basket" class="buy" src="static/basket.ico"></a>
+            <br>
         </div>
     </header>
     
@@ -29,15 +30,6 @@
                     Цвет: {{product.color}}
                     <h5>Цена: {{product.cost}} ₽</h5>
                 </div>
-                <div class="product-description">
-                    
-                    <ol>
-                        Желающие купить:
-                        {% for user in product.willings %}
-                        <li>{{user.FIO}}</li>
-                        {% endfor %}
-                    </ol>
-                </div>
                 <div>
                     Текущее состояние<br>
                     <input name = "kind" type = "radio" value="На складе" {% if product.kind == "На складе" %} checked {% endif %}>На складе<br>
@@ -46,12 +38,7 @@
                     <input name = "kind" type = "radio" value="В диллерском центре" {% if product.kind == "В диллерском центре" %} checked {% endif %}>В диллерском центре
                 </div>
                 <div class="product-inputs" >
-                    Покупатель: <select name = "FIO_user" style = "width: 200px; height: 30px;">
-                        <option value="Не определён">Не определён</option>
-                        {% for user in product.willings %}
-                        <option value="{{user.FIO}}">{{user.FIO}}</option>
-                        {% endfor %}
-                    </select>
+                    Покупатель: <input name = "FIO_user" value = "{{product.buyer}}">
                     <br>
                     <button class="buy" type="submit" name="acc_form" value="{{product.id}}up_">Одобрить</button><br>
                     <button class="buy" style="background-color: red; font-size: small;" type="submit" name="acc_form" value="{{product.id}}del">Удалить товар</button>

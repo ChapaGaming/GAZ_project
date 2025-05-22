@@ -2,42 +2,173 @@
 <html lang="ru">
 <head>
     <title>Каталог</title>
-    <link rel="stylesheet" href="static/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" type="image/x-icon" href="static/logo.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="static/logo.png">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header-left, .header-right {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background-color: #2c3e50;
+            color: #fff;
+            width: 100%;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+            justify-content: space-between;
+        }
+
+        .header-left {
+            justify-content: flex-start;
+        }
+
+        .header-right {
+            justify-content: flex-end;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            margin-right: 15px;
+            transition: transform 0.3s ease;
+        }
+
+        .logo:hover {
+            transform: scale(1.1);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .found {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+            width: 200px;
+            transition: border-color 0.3s ease;
+        }
+
+        .found:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+
+        .creator {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.15);
+            margin-top: 20px;
+            width: 80%;
+            max-width: 600px;
+            text-align: left; /* Align labels and inputs to the left */
+        }
+
+        .creator div {
+            margin-bottom: 20px;
+        }
+
+        .creator label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .creator input[type="text"],
+        .creator input[type="number"],
+        .creator input[type="radio"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+            width: calc(100% - 22px); /* Account for padding and border */
+            margin-bottom: 10px;
+        }
+
+
+        .creator input[type="radio"] {
+            width: auto; /* Reset width for radios */
+            margin-right: 5px;
+        }
+
+        .creator button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: block;
+            margin: 20px auto 0;
+        }
+
+        .creator button:hover {
+            background-color: #2980b9;
+        }
+
+        /* Optional: Add a subtle animation on form elements */
+        input:focus,
+        textarea:focus,
+        select:focus {
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); /* Light blue glow */
+        }
+    </style>
 </head>
 <body>
+
     <div class="header-left">
-            <a href="http://127.0.0.1:8000/?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png"></a>
-            <a href="http://127.0.0.1:8000/cars?email={{email}}&searching={{searching}}"><img class="logo" src="../static/logo.ico"></a>
-            <b><i><h1>РЕГИСТРАЦИЯ ТОВАРА</h1></i></b>
-        </div>
-        <div class="header-right">
-            <form name="found" method="get" action="/cars?email={{email}}">
-                <input type="hidden" name="email" value="{{email}}">
-                <input type="text" name="searching" class="found" placeholder="поиск..." value="{{searching}}">
-                <button type="submit" style="display: none;"></button> </form>
-            <br>
-        </div>
-    <br>
-    <br>
-    <p></p><br>
-    <center><form style = "font-size: 25px;" method="POST" action = "http://127.0.0.1:8000/add?email={{email}}" class="creator">
-        <div>
-        <label>Модель:  </label><input name = "model" minlength="1"><br>
-        <label>Цвет:  </label><input name = "color" minlength="1"><br>
-        <label>На складе? </label><input name = "in_stage" value = "1" type = "radio" minlength="1" checked />Да <input name = "in_stage" value = "0" type = "radio" minlength="1">Нет<br>
-        <label>Цена: </label><input type = "number" name = "cost" minlength="1">
-        </div>
-        <div>
-        <label>Состояние:</label><br>
-        
-            <input name = "kind" type = "radio" value="На складе" checked />На складе<br>
-            <input name = "kind" type = "radio" value="На рассмотрении">На рассмотрении<br>
-            <input name = "kind" type = "radio" value="В доставке">В доставке<br>
-            <input name = "kind" type = "radio" value="В диллерском центре">В диллерском центре
-        </div>
-        <button style = "width: 120px;" type = "submit"><b>Создать</b></button>
-    </form></center>
+        <a href="http://127.0.0.1:8000/cataloge/variants?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png" alt="Главная"></a>
+        <a href="http://127.0.0.1:8000/cataloge/cars?email={{email}}&searching={{searching}}"><img class="logo" src="../static/logo.png" alt="Каталог"></a>
+        <h1>РЕГИСТРАЦИЯ ТОВАРА</h1>
+    </div>
+    
+
+    <br><br>
+
+    <center>
+        <form style="font-size: 1rem;" method="POST" action="http://127.0.0.1:8000/add?email={{email}}" class="creator">
+            <div>
+                <label>Модель:</label>
+                <input type="text" name="model" minlength="1" required>
+            </div>
+            <div>
+                <label>Цвет:</label>
+                <input type="text" name="color" minlength="1" required>
+            </div>
+            <div>
+                <label>На складе?</label>
+                <input type="radio" name="in_stage" value="1" checked>Да
+                <input type="radio" name="in_stage" value="0">Нет
+            </div>
+            <div>
+                <label>Цена:</label>
+                <input type="number" name="cost" minlength="1" required>
+            </div>
+            <div>
+                <label>Состояние:</label><br>
+                <input type="radio" name="kind" value="На складе" checked>На складе<br>
+                <input type="radio" name="kind" value="На рассмотрении">На рассмотрении<br>
+                <input type="radio" name="kind" value="В доставке">В доставке<br>
+                <input type="radio" name="kind" value="В диллерском центре">В диллерском центре
+            </div>
+            <button type="submit"><b>Создать</b></button>
+        </form>
+    </center>
 </body>
 </html>

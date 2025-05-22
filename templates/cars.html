@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <title>Подтверждение</title>
+    <title>Каталог</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" type="image/x-icon" href="static/logo.png">
+    <link rel="shortcut icon" type="image/x-icon" href="../static/logo.png">
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -11,8 +11,6 @@
             margin: 0;
             padding: 0;
             color: #333;
-            position: relative; /* Required for absolute positioning of the add button */
-            min-height: 100vh; /* Ensure body takes up at least the full viewport height */
         }
 
         header {
@@ -57,11 +55,23 @@
             font-size: 1em;
             cursor: pointer;
             transition: background-color 0.3s ease;
-            margin-right: 10px;
         }
 
         .buy:hover {
             background-color: #2980b9;
+        }
+
+        #basket {
+            width: 40px;  /* Reduced size */
+            height: 40px; /* Reduced size */
+            margin-left: 15px;
+            transition: transform 0.3s ease;
+            /* Optional: Add border-radius to make it circular */
+            border-radius: 5px;
+        }
+
+        #basket:hover {
+            transform: scale(1.1);
         }
 
         h1 {
@@ -89,7 +99,6 @@
             flex-wrap: wrap;
             justify-content: center;
             padding: 20px;
-            margin-bottom: 60px; /* Make space for the fixed add button */
         }
 
         .product {
@@ -126,46 +135,50 @@
             color: #555;
         }
 
-        .product-inputs {
+        .product-description {
+            font-size: 1em;
+            color: #777;
             margin-bottom: 15px;
         }
 
-        .product-inputs input[type="text"] {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+        .product-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .product-actions h5 {
+            margin: 5px 0;
             font-size: 1em;
-            width: 80%;
-            margin-bottom: 10px;
+            color: #555;
+        }
+        p center {
+            color: rgb(221, 60, 92);
+        }
+        p center a {
+            color: rgb(255, 6, 6);
+            font-size: large;
+            text-decoration: none;
+        }
+        p center a:hover {
+            text-decoration: underline;
         }
 
-        .add_el {
-            background-color: #2ecc71; /* Green for addition */
+        /* New styles for the message banner */
+        .message-banner {
+            background-color: #e74c3c; /* Red background for attention */
             color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            font-size: 1.6em;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100; /* Ensure the button stays on top of other content */
-        }
-
-        .add_el:hover {
-            background-color: #27ae60;
+            text-align: center;
+            padding: 10px;
+            font-size: 1.1em;
         }
     </style>
 </head>
 <body>
     <header>
         <div class="header-left">
-            <a href="http://127.0.0.1:8000/cataloge/variants?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png" alt="Главная"></a>
+            <a href="http://127.0.0.1:8000/cataloge/variants?email={{email}}&searching={{searching}}"><img class="logo" src="../static/variants.png" alt="Варианты"></a>
             <a href="http://127.0.0.1:8000/cataloge/cars?email={{email}}&searching={{searching}}"><img class="logo" src="../static/logo.png" alt="Каталог"></a>
-            <h1>ПОДТВЕРЖДЕНИЕ</h1>
+            <h1>ВЫБОР АВТОМОБИЛЯ</h1>
         </div>
         <div class="header-right">
             <form name="found" method="get" action="/cataloge/cars?email={{email}}">
@@ -173,44 +186,39 @@
                 <input type="text" name="searching" class="found" placeholder="поиск..." value="{{searching}}">
                 <button type="submit" style="display: none;"></button>
             </form>
+            <a href="http://127.0.0.1:8000/basket/?email={{email}}"><img id="basket" src="../static/basket.ico" alt="Корзина"></a>
         </div>
     </header>
 
+    <!-- Message Banner -->
+    {% if seller %}
+    <div class="message-banner">
+        Здравствуйте, продавец! Вы можете зайти в <a href="http://127.0.0.1:8000/editor?email={{email}}">Заказы</a>
+    </div>
+    {% endif %}
+
     <div class="production">
         {% for product in production %}
-            <form action="/editor?email={{email}}&searching=" name="place" class="product" method="post">
+            <form action="/cataloge/cars?email={{email}}" name="place" class="product" method="post">
                 <div class="product-info">
                     <h3>{{product.model}}</h3>
                     Цвет: {{product.color}}
                     <h5>Цена: {{product.cost}} ₽</h5>
                 </div>
-                <div>
-                    Текущее состояние<br>
-                    <input name="kind" type="radio" value="На складе" {% if product.kind == "На складе" %} checked {% endif %}>На складе<br>
-                    <input name="kind" type="radio" value="На рассмотрении" {% if product.kind == "На рассмотрении" %} checked {% endif %}>На рассмотрении<br>
-                    <input name="kind" type="radio" value="В доставке" {% if product.kind == "В доставке" %} checked {% endif %}>В доставке<br>
-                    <input name="kind" type="radio" value="В диллерском центре" {% if product.kind == "В диллерском центре" %} checked {% endif %}>В диллерском центре
+                <div class="product-description">
                 </div>
-                <div class="product-inputs" >
-                    Покупатель: <input name="FIO_user" value="{{product.buyer}}">
-                    <br>
-                    <button class="buy" type="submit" name="acc_form" value="{{product.id}}up_">Одобрить</button>
-                    <button class="buy" style="background-color: red; font-size: small;" type="submit" name="acc_form" value="{{product.id}}del">Удалить товар</button>
+                <div class="product-actions">
+                    {% if product in user.baskets %}
+                    <button class="buy" type="submit" name="buy_form" value="{{product.id}}s">Отменить</button>
+                    {% else %}
+                    <button class="buy" type="submit" name="buy_form" value="{{product.id}}b">Заказать</button>
+                    {% endif %}
                     <h5>
                         {{product.kind}}
                     </h5>
                 </div>
             </form>
         {% endfor %}
-
     </div>
-
-    <button class="add_el" onclick="add()">+</button>
-
-    <script>
-        function add(){
-            window.location.href = "add?email={{email}}"
-        }
-    </script>
 </body>
 </html>

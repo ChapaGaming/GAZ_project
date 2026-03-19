@@ -1,434 +1,740 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, staticfiles, Request, Query, Depends, Form
-from sqlmodel import Field, Session, SQLModel, create_engine, select, Relationship, or_, and_
+from __future__ import annotations
+from fastapi import FastAPI, Request, Depends, Form, Response, Body
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
-from sqlalchemy.pool import QueuePool
-from typing import Annotated
-from sqlalchemy import func
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlmodel import SQLModel, Field, select, Relationship
+from sqlalchemy import Column, Integer, ForeignKey
+from sqlalchemy.orm import Mapped
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, selectinload
+from typing import Optional, Annotated, List
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timedelta
+import os
 import hashlib
-import datetime
-from colorama import init
-init()
-from colorama import Fore, Style
+import jwt
+import asyncio
+from dotenv import load_dotenv, dotenv_values
 
-#--------------------------#
-# venv\Scripts\activate    #
-#                          #  
-# venv\Scripts\deactivate  #
-#--------------------------#
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    pass
 
-app = FastAPI(debug=True)
-# sqlmodel(pydantic)
-class UserCatalogeLink(SQLModel, table = True):
-    user_id:  int | None = Field(default=None, foreign_key="user.id", primary_key=True)
-    product_id:  int | None = Field(default=None, foreign_key="cataloge.id", primary_key=True)
+from models import Users, Things, Promises
 
-class User(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    FIO: str
-    email: str
-    password: str
-    seller: bool
-    baskets: list["Cataloge"] = Relationship(back_populates="willings", link_model=UserCatalogeLink)#в " " так как питон интепритируемый и не увидет такого класса, а sqlalhemy увидит
+# Определяем окружение
+IS_PRODUCTION = os.getenv("RENDER", False)
 
-class Cataloge(SQLModel, table=True):
-    id: int = Field(default=None, primary_key=True)
-    model: str = Field(index=True)
-    color: str
-    in_stage: bool
-    cost: float
-    buyer: str|None
-    kind: str
-    willings: list[User] = Relationship(back_populates="baskets", link_model=UserCatalogeLink)
+load_dotenv()
+config = dotenv_values(".env")
 
+# Для Render используем переменные окружения напрямую
+if IS_PRODUCTION:
+    config = {
+        "DATABASE_URL": os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./database.db"),
+        "SECRET_KEY": os.getenv("SECRET_KEY"),
+        "JWT_CODER": os.getenv("JWT_CODER", "HS256"),
+        "REGISTER_KEY": os.getenv("REGISTER_KEY")
+    }
 
-# Указываем директорию для шаблонов
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", staticfiles.StaticFiles(directory="static"), name="static")
+print(f"🚀 Запуск в {'production' if IS_PRODUCTION else 'development'} режиме")
+print(f"📦 База данных: {config['DATABASE_URL']}")
 
-# работа с SQL
-def get_session(): #создание сессии
-    with Session(engine) as session:
-        yield session
+# Настройка базы данных - определяем тип БД
+database_url = config["DATABASE_URL"]
 
-sqlite_file_name = "db/database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+# Определяем параметры подключения в зависимости от типа БД
+connect_args = {}
+if database_url.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+    print("✅ Используется SQLite с aiosqlite")
+else:
+    print(f"✅ Используется PostgreSQL (asyncpg)")
 
-connect_args = {"check_same_thread": False,}
-engine = create_engine(sqlite_url, poolclass=QueuePool, pool_size=10, max_overflow=20, pool_recycle=3600, connect_args=connect_args)
-SessionDep = Annotated[Session, Depends(get_session)]
-# функции связанные с fastapi
-def history(message : str,type_message : str = "Изменение", warning : bool = False) -> None:
-    if warning:
-        with open("db/history_main.txt", "a", encoding="utf-8") as history:
-            date = datetime.datetime.now()
-            history.write("\n"+type_message+" за "+str(date)+"\n")
-            history.write(message+"\n")
-    
-    with open("db/history.txt", "a", encoding="utf-8") as history:
-        date = datetime.datetime.now()
-        history.write("\n"+type_message+" за "+str(date)+"\n")
-        history.write(message+"\n")
+engine = create_async_engine(
+    database_url,
+    echo=not IS_PRODUCTION,  # Отключаем echo в production
+    connect_args=connect_args
+)
+AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
-def go_login(session,email):
-    
-    try:
-        statement = select(User).where(User.email == email)
-        user = len(session.exec(statement).all())
-        if user == 1:
-            return False
-        else:
-            return True
-    except:
-        return True
-# функции не связанные с fastapi
-def clear_db(db):
-    with Session(engine) as session:
-        results = session.exec(select(db)).all()
-        for result in results:
-            session.delete(result)
-        session.commit()
+# Утилиты
 def hashing(text):
-    return hashlib.sha256(text.encode()).hexdigest()# текст кодируется по сиситеме sha256 и префращфется в 16-ричную систему
+    return hashlib.sha256(text.encode()).hexdigest()
 
-def create_db_and_tables():# обнуление/создание таблиц
-    global engine
-    SQLModel.metadata.create_all(engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Приложение запускается...")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    print("✅ База данных готова")
+    yield
+    print("🛑 Приложение останавливается...")
+    await engine.dispose()
 
-def update_info(session):
-    #Получаем статистику
-    written_text = "Статистика\n Актуальность: "+str(datetime.datetime.now())
-    statement = select(func.count(Cataloge.id),
-        func.sum(Cataloge.cost),#цена всех автомобилей
-        Cataloge.model, #модель
-        func.avg(Cataloge.cost).label("average_cost"),#средняя цена модели
-        func.count(Cataloge.id).label("model_count"))#количество автомобилей
-    results = session.exec(statement).all()
-    print(results)
-    for result in results:
-        print(result)
-        written_text += "\n"+result[2]+":"
-        written_text += "\n    - Средняя цена в рублях:  "+str(result[3])
-        written_text += "\n    - Количество автомобилей: "+str(result[4])
-    written_text += "\n-----------------------------------------------\n"
-    written_text += "Всего автомобилей:      "+str(results[0][0]) + "\n"
-    written_text += "Общая цена автомобилей: "+str(results[0][1])
-    #Записывем статистику в файл
-    with open("db/info.txt", "w", encoding="utf-8") as history:
-        history.write(written_text)
-# обработка запросов
-@app.on_event("shutdown")
-def on_end():
-    
-    with open("db/history.txt", "a", encoding="utf-8") as history:
-        history.write("\n▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ \n Остановка сервера")
-@app.on_event("startup")
-def on_start():
-    create_db_and_tables()
-    history("▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ▰ ","Запуск сервера")
-@app.get("/",response_class=HTMLResponse)
-def read_root(request: Request):
-    req = {"request": request}
-    return templates.TemplateResponse("login.html", req)
+app = FastAPI(lifespan=lifespan)
 
-@app.post("/")
-def read_root(session:SessionDep, request: Request, password: str|None = Form(...), email: str|None = Form(...)):
-    update_info(session)
-    hash_e =hashing(email)
-    hash_pas = hashing(password)
-    statement = select(User).where(User.email == hash_e).where(User.password == hash_pas)
-    result = session.exec(statement)
-    first = result.first()
-    if not (first is None):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.1; URL='/cataloge/cars?email={hash_e}'" />""")
-    return HTMLResponse(content=f'<h1 style = "color: red;">Пользователь не найден</h1>')
+# CORS - динамический список origins
+origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+if IS_PRODUCTION:
+    origins.append("https://gaz-storage.onrender.com")
 
-@app.get("/register",response_class=HTMLResponse)
-def read_root(request: Request):
-    req = {"request": request}
-    return templates.TemplateResponse("register.html", req)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
-@app.post("/register",response_class=HTMLResponse)
-def read_root(session: SessionDep, request: Request, FIO: str = Form(...), email: str = Form(...), password: str = Form(...), rep_password: str = Form(...)):
-    update_info(session)
-    if password == rep_password:
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# Зависимости
+async def get_session() -> AsyncSession:
+    async with AsyncSessionLocal() as session:
         try:
-            hash_e = hashing(email)
-            hash_pas = hashing(password)
-            user = User(FIO = FIO, email = hash_e, password = hash_pas, basket = None, seller=False)
-        except Exception as e:
-            return e
-        email_query = select(User).where(User.email == hash_e)
-        result = session.exec(email_query)
-        first = result.first()
-        if not (first is None):
-            return HTMLResponse(content=f'<h1 style = "color: red;">Пользователь с такой почтой уже есть</h1>')
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        history("Пользователь {user} зарегистрировался","Регистрация")
-        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="2; URL='/'" />""")
-    return f'<h1 style = "color: red;">Пароли не совпадают</h1>'
+            yield session
+        finally:
+            await session.close()
 
-@app.get("/basket/", response_class=HTMLResponse)
-def read_root(session: SessionDep, request: Request, email:str|None, searching: str | None = None):
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    req = {
-        "request": request,
-        "searching":"",
-        "email": email,
-        "forms": [] # Устанавливаем production по умолчанию пустым списком
-    }
-    statement = select(User).where(User.email == email)
-    user = session.exec(statement).one()
-    if searching and searching.strip() and user:
-        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
-        alls = session.exec(statement).all()
-        production = []
-        for el in alls:
-            if el in user.baskets:
-                production.append(el)
-        req["forms"] = production
-        req["searching"] = searching
-    else:
-        statement = select(Cataloge)
-        production = session.exec(statement).all()
-        req["forms"] = user.baskets
-    req["len"] = len(production)
-    return templates.TemplateResponse("basket.html", req)
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-
-@app.post("/basket", response_class=HTMLResponse)
-def read_root(session: SessionDep, email:str|None, submit: int = Form(...), searching: str | None = None):
-    
-    update_info(session)
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    product = session.get(Cataloge,submit)
-    statement = select(User).where(User.email == email)
-    user = session.exec(statement).one()
-    user.baskets.remove(product)
-    session.add(user)
-    session.commit()
-    history(f"Пользователь {user.FIO} удалил отслеживание для {product}", "Удаление отслеживания")
-    return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
-
-
-
-@app.post("/cataloge/cars", response_class=HTMLResponse)
-def read_root(session: SessionDep, email:str|None, buy_form: str = Form(...), searching: str | None = None):
-    id = buy_form[:-1]
-    mode = buy_form[-1:]
-    if go_login(session,email):
-            return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    if mode == "b":#buy
-        product = session.get(Cataloge,id)
-        scalar = select(User).where(User.email == email)
-        result = session.exec(scalar)
-        if product.in_stage == False:
-            return HTMLResponse(content='<h1 style = "color: red;">Уже в диллерском центре</h1>')
-        user = result.first()
-        if user in product.willings:
-            return HTMLResponse(content='<h1 style = "color: red;">вы уже заказали, вы можете удалить его в списке отслеживания</h1>')
-        product.willings.append(user)
-        session.add(product)
-        session.commit()
-        if not searching:
-            searching=""
-        history(F"пользователь {user.FIO} начал отслеживать {product}", "Отслеживание")
-        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
-    elif mode == "s": #sell
-        product = session.get(Cataloge,id)
-        scalar = select(User).where(User.email == email)
-        result = session.exec(scalar)
-        if product.in_stage == False:
-            return HTMLResponse(content='<h1 style = "color: red;">Уже в диллерском центре</h1>')
-        user = result.first()
-        if not (user in product.willings):
-            return HTMLResponse(content='<h1 style = "color: red;">вы уже удалили, вы можете добавить его в списке отслеживания</h1>')
-        product.willings.remove(user)
-        session.add(product)
-        session.commit()
-        if not searching:
-            searching=""
-        history(F"пользователь {user.FIO} перестал отслеживать {product}", "Отслеживание")
-        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно!</h1>> <meta http-equiv="refresh" content="0.5; URL='/cataloge/cars?email={email}&searching={searching}'" />""")
-
-@app.get("/cataloge/cars", response_class=HTMLResponse)
-def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
-    req = {
-        "request": request,
-        "email": email,
-        "searching":"",
-        "user": User(FIO="null",password="null", email="null",seller=False, baskets=[]) # Default user, with baskets as empty list
-    }
-    req["seller"] = False  #Default
-
-    if not go_login(session, email):  #Reverse the logic to only load the user if the login *succeeds*
-        try:  #Error handling
-            statement = select(User).where(User.email == email)
-            user = session.exec(statement).one()
-            req["seller"] = user.seller
-            req["user"] = user
-        except:
-            pass # if the user fails to load for some reason
-    else: #if login fails
-        pass
-
-    if searching and searching.strip():
-        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
-        production = session.exec(statement).all()
-        req["production"] = production
-        req["searching"] = searching
-    else:
-        statement = select(Cataloge)
-        production = session.exec(statement).all()
-        req["production"] = production
-    
-    return templates.TemplateResponse("cars.html", req)
-
-@app.get("/cataloge/variants", response_class=HTMLResponse)
-def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
-    req = {
-        "request": request,
-        "email": email,
-        "searching":"",
-        "len_production": 0
-    }
-    if go_login(session,email):
-        req["seller"] = False
-    else:
-        statement = select(User).where(User.email == email)
-        user = session.exec(statement).one()
-        req["seller"] = user.seller
-    
-    if searching and searching.strip():
-        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
-        production = session.exec(statement).all()
-        req["searching"] = searching
-
-        models = set(map(lambda x: x.model,production))
-        all_model = list(map(lambda x: x.model,production))
-
-        production = list(map(lambda x: (x,all_model.count(x)), models))
-        req["production"] = production
-    else:
-        statement = select(Cataloge)
-        production_last = session.exec(statement).all()
-        models = set(map(lambda x: x.model,production_last))
-
-        statement = select(
-            Cataloge.model,
-            func.avg(Cataloge.cost).label("average_cost"),
-            func.count(Cataloge.id).label("model_count")  # Используем func.avg()
-        ).group_by(Cataloge.model)
-
-        results = session.exec(statement).all() # Выполнение запроса
-        req["production"] = results
+def create_tokens(response: Response, data: dict, save = True) -> Response:
     try:
-        req["len_production"] = len(results)
-    except:
-        req["len_production"] = 0
+        # Refresh Token (30 дней)
+        refresh_data = data.copy()
+        refresh_data["exp"] = int((datetime.now() + timedelta(days=30)).timestamp())
+        refresh_token = jwt.encode(refresh_data, config["SECRET_KEY"], algorithm=config["JWT_CODER"])
 
-    return templates.TemplateResponse("variants.html", req)
+        # Access Token (15 минут)
+        access_data = data.copy()
+        access_data["exp"] = int((datetime.now() + timedelta(minutes=15)).timestamp())
+        access_token = jwt.encode(access_data, config["SECRET_KEY"], algorithm=config["JWT_CODER"])
 
+        # Устанавливаем куки
+        cookie_params = {
+            "max_age": 30*24*60*60 if save else 15*60,
+            "httponly": True,
+            "secure": IS_PRODUCTION,
+            "samesite": "lax",
+            "path": "/"
+        }
+        
+        if save:
+            response.set_cookie(key="refresh", value=str(refresh_token), **cookie_params)
+        
+        response.set_cookie(key="access", value=str(access_token), **cookie_params)
+        
+        print("✅ Auth куки успешно установлены!")
+        return response
+        
+    except Exception as e:
+        print(f"❌ Ошибка установки auth кук: {e}")
+        raise
 
-@app.get("/editor", response_class=HTMLResponse)
-def read_root(request: Request, session: SessionDep, email: str | None = None, searching: str | None = None):
-    req = {
-        "request": request,
-        "email": email,
-        "searching":""
-    }
-    if go_login(session,email):
-        req["seller"] = False
-    else:
-        statement = select(User).where(User.email == email)
-        user = session.exec(statement).one()
-        req["seller"] = user.seller
+# Аутентификация
+async def authenticate_user(request: Request, html: str = "-1", **variables_html):
+    access_token = request.cookies.get("access")
     
-    
-    if searching and searching.strip():
-        statement = select(Cataloge).where(Cataloge.model.like(f"%{searching.upper()}%"))
-        production = session.exec(statement).all()
-        req["production"] = production
-        req["searching"] = searching
-    else:
-        statement = select(Cataloge).where()
-        production = session.exec(statement).all()
-        req["production"] = production
-    return templates.TemplateResponse("editor.html", req)
-
-@app.post("/editor", response_class=HTMLResponse)
-def read_root(session: SessionDep,FIO_user: Annotated[str, Form()], email:str|None, acc_form: Annotated[str, Form()], kind: Annotated[str, Form()],  searching: str | None = None):
-    update_info(session)
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    mode = acc_form[-3:] # del удаление up_ изменение
-    id = acc_form[:-3]
-    product = session.get(Cataloge,id)
-    history_old_product = f" автомобиль {product.model} стоимостью {product.cost}, цвет: {product.color} с предпочительным покупатилем в лице {product.buyer} его состояние {product.kind} "
-    scalar = select(User).where(User.FIO == FIO_user)
-    user = session.exec(scalar)
-    user = user.first()
-
-    seller = select(User).where(User.email == email)
-    seller = session.exec(seller)
-    seller = seller.first()
-    if mode == "up_":
+    if access_token:
         try:
-            user_name = user.FIO
-        except:
-            user_name = "<пусто>"
-        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL +f":  Продавец {seller.FIO}(id={seller.id}) обновил пользователю {user_name} товар:",product)
-        
-        product.buyer = user_name
-        product.kind = kind
-        history_product = f" автомобиль {product.model} стоимостью {product.cost}, цвет: {product.color} с предпочительным покупатилем в лице {product.buyer} его состояние {product.kind} "
-        session.add(product)
-        
-        product.in_stage = False
-        if product.kind.lower() == "в диллерском центре":
-            product.in_stage = True
+            decoded_access = await asyncio.to_thread(
+                jwt.decode, access_token, config["SECRET_KEY"], algorithms=[config["JWT_CODER"]]
+            )
+            print("Access токен:", decoded_access)
+            
+            variables_html["request"] = request
+            variables_html["user"] = decoded_access
+            
+            if html != "-1":
+                response = templates.TemplateResponse(html, variables_html)
+            else:
+                response = templates.TemplateResponse("profile.html", variables_html)
+            
+            response_with_cookies = create_tokens(response, decoded_access)
+            
+            return (decoded_access, response_with_cookies)
+            
+        except jwt.ExpiredSignatureError:
+            print("Access токен просрочен, пробуем обновить...")
+    
+    # Пробуем refresh токен
+    refresh_token = request.cookies.get("refresh")
+    if refresh_token:
+        try:
+            decoded_refresh = await asyncio.to_thread(
+                jwt.decode, refresh_token, config["SECRET_KEY"], algorithms=[config["JWT_CODER"]]
+            )
+            print("Refresh токен:", decoded_refresh)
+            
+            variables_html["request"] = request
+            variables_html["user"] = decoded_refresh
+            
+            if html != "-1":
+                response = templates.TemplateResponse(html, variables_html)
+            else:
+                response = templates.TemplateResponse("profile.html", variables_html)
+            
+            response_with_cookies = create_tokens(response, decoded_refresh)
+            
+            return (decoded_refresh, response_with_cookies)
+            
+        except jwt.ExpiredSignatureError:
+            print("Refresh токен также просрочен")
+    
+    print("Токены отсутствуют или просрочены")
+    return None
 
-        session.commit()
-        if not searching:
-            searching=""
-        history(F"Продавец {seller.FIO} изменил {history_old_product} на {history_product}", "Обновление товара", warning=True)
-        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/editor?email={email}&searching={searching}'" />""")
-    elif mode == "del":
-        session.delete(product)
-        session.commit()
-        print(Fore.YELLOW + "WARNING"+ Style.RESET_ALL + f":  Продавец {seller.FIO}(id={seller.id}) удалил товар:", product)
-        history(F"Продавец {seller.FIO} удалил {product}", "Удаление", warning=True)
-        return HTMLResponse(content=f"""<h1 style = "color: green;">Успешно</h1>> <meta http-equiv="refresh" content="0.5; URL='/editor?email={email}&searching={searching}'" />""")
+# Роуты
 
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get("/add", response_class=HTMLResponse)
-def read_root(session: SessionDep, request: Request, email:str|None):
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    return templates.TemplateResponse("add.html", {"request": request, "email": email})
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request, session: SessionDep):
+    auth_data = await authenticate_user(request, "register.html")
+    
+    if auth_data:
+        data = auth_data[0]
+        user = await session.get(Users, data["id"])
+        if user and user.email == data["email"] and user.hashed_password == data["password"] and user.fio == data["fio"] and user.admin == data["admin"]:
+            return RedirectResponse(url="/profile", status_code=303)
+        print("У пользователя сомнительные куки")
+        return RedirectResponse(url="/logout", status_code=303)
+    
+    return templates.TemplateResponse("register.html", {"request": request})
 
-@app.post("/add", response_class=HTMLResponse)
-def read_root(session: SessionDep, request: Request, email:str|None, model: Annotated[str, Form()], kind: Annotated[str, Form()], in_stage: Annotated[str, Form()], cost: Annotated[int, Form()], color: Annotated[str, Form()]):
-    update_info(session)
-    if go_login(session,email):
-        return HTMLResponse(content=f"""<meta http-equiv="refresh" content="0.001; URL='/'" />""")
-    seller = select(User).where(User.email == email)
-    seller = session.exec(seller)
-    seller = seller.first()
-    if in_stage == "1":
-        in_stage = True
+@app.get("/things", response_class=HTMLResponse)
+async def things_page(request: Request, session: SessionDep):
+    statement = select(Things)
+    result = await session.execute(statement)
+    things = result.scalars().all()
+    total_value = sum(thing.buy_cost * thing.amount for thing in things)
+    if total_value >= 10_000_000:
+        total_value = str(round(total_value/1_000_000,2))+" млн"
     else:
-        in_stage = False
-    item = Cataloge(model = model, kind = kind, in_stage=in_stage, color=color, cost=cost, willings=[])
-    history(F"пользователь {seller.FIO} создал {item}", "Создание", warning=True)
-    session.add(item)
-    session.commit()
-    return "200 OK"
+        total_value = str(round(total_value/1_000,2))+" тыс."
+    print(things)
+    auth_data = await authenticate_user(request, "things.html", things=things, total_value=total_value)
+    
+    if auth_data:
+        return auth_data[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/admin/add", response_class=HTMLResponse)
+async def admin_add_page(request: Request, session: SessionDep):
+    auth_data = await authenticate_user(request, "admin_add.html")
+    
+    if auth_data and auth_data[0]["admin"]:
+        return auth_data[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request, session: SessionDep):
+    auth_data = await authenticate_user(request, "admin.html")
+    
+    if auth_data and auth_data[0]["admin"]:
+        return auth_data[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, session: SessionDep):
+    auth_data = await authenticate_user(request, "login.html")
+    
+    if auth_data:
+        data = auth_data[0]
+        user = await session.get(Users, data["id"])
+        if user and user.email == data["email"] and user.hashed_password == data["password"] and user.fio == data["fio"] and user.admin == data["admin"]:
+            return RedirectResponse(url="/profile", status_code=303)
+        print("У пользователя сомнительные куки")
+        return RedirectResponse(url="/logout", status_code=303)
+    
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/login")
+async def login_user(
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    email: str = Form(...),
+    password: str = Form(...),
+    remember: Optional[str] = Form(None)
+):
+    stmt = select(Users).where(Users.email == email).where(Users.hashed_password == hashing(password))
+    result = await session.execute(stmt)
+    user = result.first()
+    
+    if user:
+        data = {
+            "email": email,
+            "password": hashing(password),
+            "fio": user[0].fio,
+            "admin": user[0].admin,
+            "id": user[0].id
+        }
+        redirect_response = RedirectResponse(url="/profile", status_code=303)
+        redirect_response = create_tokens(redirect_response, data, save=bool(remember))
+        return redirect_response
+    else:
+        return templates.TemplateResponse("login.html", {
+            "request": request, 
+            "error": "Неверный email или пароль"
+        })
+
+@app.post("/register", name="register_user")
+async def register(
+    request: Request, 
+    session: SessionDep, 
+    fio: str = Form(...), 
+    email: str = Form(...), 
+    password: str = Form(...), 
+    password_rep: str = Form(...),
+    admin_key: str = Form(None)
+):
+    print("🎯 Начало регистрации...")
+    
+    if len(fio) < 8:
+        return templates.TemplateResponse("register.html", {
+            "request": request, 
+            "error": "ФИО должно быть не менее 8 символов"
+        })
+    
+    if password != password_rep:
+        return templates.TemplateResponse("register.html", {
+            "request": request, 
+            "error": "Пароли не совпадают"
+        })
+    
+    stmt = select(Users).where(Users.email == email)
+    result = await session.execute(stmt)
+    if result.scalar_one_or_none():
+        return templates.TemplateResponse("register.html", {
+            "request": request, 
+            "error": "Пользователь с таким email уже существует"
+        })
+    
+    hashed_pass = hashing(password)
+    new_user = Users(fio=fio, email=email, hashed_password=hashed_pass, admin=False)
+    if admin_key == config["REGISTER_KEY"]:
+        new_user.admin = True
+    session.add(new_user)
+    await session.commit()
+    print("✅ Пользователь создан")
+    
+    data = {"email": email, "password": hashed_pass, "fio": fio, "admin": new_user.admin, "id": new_user.id}
+    
+    redirect_response = RedirectResponse(url="/profile", status_code=303)
+    redirect_response = create_tokens(redirect_response, data)
+    return redirect_response
+
+@app.get("/edit/{id}", response_class=HTMLResponse)
+async def menu(request: Request, session: SessionDep, id: int):
+    auth_data = await authenticate_user(request, "-1")
+    
+    if not auth_data:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    decoded_user, _ = auth_data
+    
+    try:
+        thing = await session.get(Things, id)
+    except Exception as e:
+        print(f"Ошибка БД: {e}")
+        await session.rollback()
+        thing = None
+    
+    context = {
+        "request": request,
+        "user": decoded_user,
+        "thing": thing
+    }
+    
+    response = templates.TemplateResponse("edit.html", context)
+    response = create_tokens(response, decoded_user, save=False)
+    
+    return response
+
+@app.post("/admin/add")
+async def admin_add(request: Request, session: SessionDep, 
+                   name: str = Form(...), 
+                   description: str = Form(...), 
+                   amount: int = Form(...), 
+                   buy_cost: float = Form(...), 
+                   kind: str = Form(...)):
+    
+    auth_data = await authenticate_user(request, "admin_add.html")
+    
+    if auth_data and auth_data[0]["admin"]:
+        thing = Things(name=name, description=description, amount=amount, buy_cost=buy_cost, kind=kind)
+        session.add(thing)
+        await session.commit()
+        return auth_data[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.post("/admin/edit/{id}")
+async def admin_edit(request: Request, session: SessionDep,
+                id: int,
+                name: str = Form(...),
+                description: str = Form(...),
+                amount: int = Form(...),
+                buy_cost: float = Form(...),
+                kind: str = Form(...)):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+        
+        thing = await session.get(Things, id)
+        if not thing:
+            return RedirectResponse(url="/things?error=not_found", status_code=303)
+           
+        thing.name = name
+        thing.description = description
+        thing.amount = amount
+        thing.buy_cost = buy_cost
+        thing.kind = kind
+
+        await session.commit()
+        return RedirectResponse(url='/things', status_code=303)
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.post("/operator/edit/{id}")
+async def operator_edit(request: Request, session: SessionDep,
+                id: int,
+                new_name: str = Form(...),
+                new_description: str = Form(...),
+                new_amount: int = Form(...),
+                new_buy_cost: float = Form(...),
+                new_kind: str = Form(...),
+                priority: str = Form(...),
+                comment: str = Form(...)
+                ):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and not auth_data[0]["admin"]:
+        
+        thing = await session.get(Things, id)
+        user = await session.get(Users, int(auth_data[0]["id"]))
+        
+        if not thing or not user:
+            return RedirectResponse(url="/things?error=not_found", status_code=303)
+        
+        promise = Promises(promise_owner=user, requested_thing=thing,
+                           new_amount=new_amount,
+                           new_buy_cost=new_buy_cost,
+                           new_kind=new_kind,
+                           new_description=new_description,
+                           new_name=new_name,
+                           created_at=datetime.now(),
+                           die_at=(datetime.now()+timedelta(days=14)),
+                           priority=priority,
+                           message=comment,
+                           old_amount=thing.amount,
+                           old_buy_cost=thing.buy_cost,
+                           old_kind=thing.kind,
+                           old_description=thing.description,
+                           old_name=thing.name,
+                           thing_id=thing.id,
+                           user_id=user.id)
+        
+        if thing.name == promise.new_name:
+            promise.new_name = None
+        if thing.description == promise.new_description:
+            promise.new_description = None
+        if thing.amount == promise.new_amount:
+            promise.new_amount = None
+        if thing.buy_cost == promise.new_buy_cost:
+            promise.new_buy_cost = None
+        if thing.kind == promise.new_kind:
+            promise.new_kind = None
+            
+        # Проверка на дубликаты
+        stmt = select(Promises).where(
+            Promises.new_name == promise.new_name,
+            Promises.new_description == promise.new_description,
+            Promises.new_amount == promise.new_amount,
+            Promises.new_buy_cost == promise.new_buy_cost,
+            Promises.new_kind == promise.new_kind,
+            Promises.thing_id == thing.id,
+            Promises.user_id == user.id
+        )
+        result = await session.execute(stmt)
+        copy = result.scalar_one_or_none()
+        
+        if copy is None:
+            session.add(promise)
+            await session.commit()
+            return RedirectResponse(url='/things', status_code=303)
+        
+        return templates.TemplateResponse("edit.html", {
+            "request": request,
+            "user": auth_data[0],
+            "thing": thing,
+            "error": "Такая заявка уже существует"
+        })
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/admin/requests/")
+async def admin_requests(request: Request, session: SessionDep):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+        # Удаляем устаревшие заявки
+        stmt = select(Promises).where(Promises.die_at < datetime.now())
+        result = await session.execute(stmt)
+        expired_promises = result.scalars().all()
+        for promise in expired_promises:
+            await session.delete(promise)
+        if expired_promises:
+            print("Удалены устаревшие данные:", len(expired_promises))
+        
+        # Получаем актуальные заявки
+        statement = select(Promises, Things, Users).where(
+            Promises.user_id == Users.id,
+            Promises.thing_id == Things.id
+        )
+        result = await session.execute(statement)
+        data = result.all()
+        
+        await session.commit()
+        
+        auth_response = await authenticate_user(request, "admin_requests.html", data=data, now=datetime.now())
+        if auth_response:
+            return auth_response[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/operator/requests/")
+async def operator_requests(request: Request, session: SessionDep):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and not auth_data[0]["admin"]:
+        
+        stmt = select(Promises)\
+        .where(Promises.user_id == auth_data[0]["id"])\
+        .options(selectinload(Promises.requested_thing))\
+        .order_by(Promises.created_at.desc())
+    
+        result = await session.execute(stmt)
+        promises = result.scalars().all()
+        
+        auth_response = await authenticate_user(request, "operator_requests.html", promises=promises)
+
+        await session.commit()
+        if auth_response:
+            return auth_response[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.post("/admin/requests/{id}/reject")
+async def decline(request: Request, session: SessionDep, id: int):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+        
+        promise = await session.get(Promises, id)
+        if promise:
+            promise.status = "Отклонено"
+            await session.commit()
+        return RedirectResponse(url='/admin/requests', status_code=303)
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.post("/admin/requests/{id}/approve")
+async def claim(request: Request, session: SessionDep,
+                id: int,
+                new_name: str|None = Form(...),
+                new_description: str|None = Form(...),
+                new_amount: int|None = Form(...),
+                new_buy_cost: float|None = Form(...),
+                new_kind: str|None = Form(...)):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+
+        stmt = select(Promises).where(Promises.id == id).options(
+            selectinload(Promises.requested_thing)
+        )
+        result = await session.execute(stmt)
+        promise = result.scalar_one_or_none()
+        
+        if not promise:
+            return RedirectResponse(url="/admin/requests?error=not_found", status_code=303)
+
+        promise.status = "Одобрено"
+        thing = promise.requested_thing
+        if not thing:
+            return RedirectResponse(url="/admin/requests?error=thing_not_found", status_code=303)
+            
+        if thing.name == promise.new_name:
+            promise.new_name = None
+        if thing.description == promise.new_description:
+            promise.new_description = None
+        if thing.amount == promise.new_amount:
+            promise.new_amount = None
+        if thing.buy_cost == promise.new_buy_cost:
+            promise.new_buy_cost = None
+        if thing.kind == promise.new_kind:
+            promise.new_kind = None
+
+        thing.name = new_name
+        thing.description = new_description
+        thing.amount = new_amount
+        thing.buy_cost = new_buy_cost
+        thing.kind = new_kind
+        
+        await session.commit()
+
+        return RedirectResponse(url="/admin/requests", status_code=303)
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/admin/delete/{id}")
+async def delete_item(request: Request, session: SessionDep, id: int):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+        thing = await session.get(Things, id)
+        
+        if not thing:
+            return RedirectResponse(url="/things?error=not_found", status_code=303)
+        
+        await session.delete(thing)
+        await session.commit()
+        
+        return RedirectResponse(url="/things?success=deleted", status_code=303)
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request, session: SessionDep):
+    auth_data = await authenticate_user(request, "profile.html")
+    
+    if auth_data:
+        return auth_data[1]
+    else:
+        print("В куки нет данных")
+        return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/my-cookies")
+async def my_cookies(request: Request):
+    cookies = dict(request.cookies)
+    return {
+        "message": "Текущие куки:",
+        "cookies": cookies,
+        "total_cookies": len(cookies)
+    }
+
+@app.get("/logout")
+async def logout(response: Response):
+    print("❌ Пользователь вышел")
+    new_r = RedirectResponse(url="/")
+    new_r.delete_cookie(key="access")
+    new_r.delete_cookie(key="refresh")
+    
+    return new_r
+
+@app.post("/admin/requests/{id}/update-lifetime")
+async def update_time(
+    request: Request,
+    session: SessionDep,
+    id: int,
+    days: int = Form(None),
+    data: dict = Body(None)
+):
+    auth_data = await authenticate_user(request, "admin_requests.html")
+    
+    if auth_data and auth_data[0]["admin"]:
+        if days is not None:
+            days_value = days
+        elif data and 'days' in data:
+            days_value = data['days']
+        else:
+            return RedirectResponse(
+                url="/admin/requests?error=Не указано количество дней",
+                status_code=303
+            )
+        
+        promise = await session.get(Promises, id)
+        if promise:
+            promise.die_at = datetime.now() + timedelta(days=days_value+1)
+            
+            session.add(promise)
+            await session.commit()
+            
+            return RedirectResponse(
+                url="/admin/requests?success=Срок жизни заявки обновлен",
+                status_code=303
+            )
+        else:
+            return RedirectResponse(
+                url="/admin/requests?error=Заявка не найдена",
+                status_code=303
+            )
+    else:
+        return RedirectResponse(url="/login", status_code=303)
+    
+@app.get("/users")
+async def users(request: Request, session: SessionDep):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+        current_user = await session.get(Users, auth_data[0]["id"])
+
+        statement = select(Users)
+        result = await session.execute(statement)
+        users = result.scalars().all()
+
+        auth_response = await authenticate_user(request, "users.html", current_user=current_user, users=users)
+        
+        return auth_response[1]
+
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.post("/admin/users/{id}/delete")
+async def delete_user(request: Request, session: SessionDep, id: int):
+    
+    auth_data = await authenticate_user(request, "-1")
+    
+    if auth_data and auth_data[0]["admin"]:
+        user = await session.get(Users, id)
+        
+        if not user:
+            return RedirectResponse(url="/users?error=not_found", status_code=303)
+        
+        await session.delete(user)
+        await session.commit()
+        
+        return RedirectResponse(url="/users?success=deleted", status_code=303)
+
+    return RedirectResponse(url="/login", status_code=303)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    
+    port = int(os.getenv("PORT", 8000))
+    host = "0.0.0.0" if IS_PRODUCTION else "127.0.0.1"
+    
+    print(f"🌐 Сервер запускается на {host}:{port}")
+
+    uvicorn.run(app, host=host, port=port)
